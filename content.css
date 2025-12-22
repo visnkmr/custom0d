@@ -17,7 +17,7 @@
     cursor: pointer;
     border: none;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    opacity: 0;
+    opacity: 1;
     /* Hidden by default, shown on row hover */
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
