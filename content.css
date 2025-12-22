@@ -58,6 +58,8 @@
     align-items: center;
 }
 
-.kite-btn svg {
+.kite-btn .icon {
+    font-size: 14px;
     pointer-events: none;
+    color: white;
 }

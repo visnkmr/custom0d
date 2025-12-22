@@ -3,9 +3,10 @@ console.log("Kite Custom Actions Extension - V4 - Improved Selectors");
 const BTN_CONTAINER_CLASS = 'kite-action-btns';
 
 const ICONS = {
-    buy: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
-    chart: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"></path><path d="M12 20V4"></path><path d="M6 20v-6"></path></svg>`,
-    depth: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>`
+    buy: `<span>A</span>`,
+    chart: `<span>C</span>`,
+    depth: `<span>MD</span>`,
+    breakdown: `<span>B</span>`
 };
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -56,6 +57,15 @@ async function triggerKiteAction(row, actionType) {
                 (el.innerText || '').toLowerCase().includes("chart")
             );
         }
+    }else if (actionType === 'Breakdown') {
+        // Based on user provided HTML: <span class="icon icon-trending-up"></span> Chart
+        target = document.querySelector(".icon-console")?.closest("a");
+        if (!target) {
+            // Fallback search by text
+            target = Array.from(document.querySelectorAll('.table-menu-content a')).find(el =>
+                (el.innerText || '').toLowerCase().includes("breakdown")
+            );
+        }
     }
 
     if (target) {
@@ -103,10 +113,12 @@ function injectActionButtons() {
         const buyBtn = createActionButton('buy', 'Add to Basket (Buy)', 'Add', row);
         const depthBtn = createActionButton('depth', 'Market Depth', 'Market depth', row);
         const chartBtn = createActionButton('chart', 'Open Chart', 'Chart', row);
+        const breakdownBtn = createActionButton('breakdown', 'Open Breakdown', 'Breakdown', row);
 
         container.appendChild(buyBtn);
         container.appendChild(depthBtn);
         container.appendChild(chartBtn);
+        container.appendChild(breakdownBtn);
 
         const target = instrumentCell.querySelector('a.initial, .tradingsymbol');
         if (target) {
