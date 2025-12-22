@@ -1,4 +1,4 @@
-console.log("Kite Custom Actions Extension - Refined Logic");
+console.log("Kite Custom Actions Extension - V4 - Improved Selectors");
 
 const BTN_CONTAINER_CLASS = 'kite-action-btns';
 
@@ -21,47 +21,57 @@ async function triggerKiteAction(row, actionType) {
         return;
     }
 
-    // 2. Trigger mouseover on the menu button to "wake up" the row/dropdown logic
+    // 2. Trigger mouseover on the row and then the menu button
+    row.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, view: window }));
+    await delay(10);
     menuBtn.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, view: window }));
-    await delay(20);
+    await delay(10);
 
     // 3. Click the menu button to open the dropdown
     menuBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, view: window, cancelable: true }));
 
-    // 4. Wait for the dropdown to appear in the DOM
-    await delay(30);
+    // 4. Wait for the dropdown to appear
+    await delay(50);
 
-    // 5. Find the target action element
+    // 5. Look for target element using icon classes (more reliable than text)
     let target = null;
 
-    // Look in the entire document since Kite often appends menus to the body
-    const dropdown = document.querySelector(".table-menu-content, .context-menu, .dropdown");
-    const searchScope = dropdown ? [dropdown] : [document.body];
-
     if (actionType === 'Add') {
-        // "Add" is a special data-label in the toolbar
         target = document.querySelector('[data-label="Add"]');
     } else if (actionType === 'Market depth') {
-        // Search for the text "Market depth"
-        target = Array.from(document.querySelectorAll('a, span, li')).find(el =>
-            (el.innerText || '').toLowerCase().includes("market depth")
-        );
+        // Based on user provided HTML: <span class="icon icon-align-center"></span>Market depth
+        target = document.querySelector(".icon-align-center")?.closest("a");
+        if (!target) {
+            // Fallback search by text
+            target = Array.from(document.querySelectorAll('.table-menu-content a')).find(el =>
+                (el.innerText || '').toLowerCase().includes("market depth")
+            );
+        }
     } else if (actionType === 'Chart') {
-        // Search for the text "Chart"
-        target = Array.from(document.querySelectorAll('a, span, li')).find(el =>
-            (el.innerText || '').toLowerCase().includes("chart")
-        );
+        // Based on user provided HTML: <span class="icon icon-trending-up"></span> Chart
+        target = document.querySelector(".icon-trending-up")?.closest("a");
+        if (!target) {
+            // Fallback search by text
+            target = Array.from(document.querySelectorAll('.table-menu-content a')).find(el =>
+                (el.innerText || '').toLowerCase().includes("chart")
+            );
+        }
     }
 
     if (target) {
-        console.log(`Triggering Kite action: ${actionType}`);
+        console.log(`Clicking ${actionType} action`);
         target.click();
+
+        // Final cleanup: move mouse away to allow menu to close if it doesn't automatically
+        setTimeout(() => {
+            menuBtn.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }));
+        }, 100);
     } else {
-        console.warn(`Action element for "${actionType}" not found. Trying fallback.`);
-        // Fallback to keyboard shortcuts (last resort)
+        console.warn(`Action "${actionType}" not found in dropdown. Falling back to key simulation.`);
         row.click();
         const key = actionType === 'Add' ? 'b' : (actionType === 'Chart' ? 'c' : 'd');
-        document.dispatchEvent(new KeyboardEvent('keydown', { key, keyCode: key.toUpperCase().charCodeAt(0), bubbles: true }));
+        const keyCode = actionType === 'Add' ? 66 : (actionType === 'Chart' ? 67 : 68);
+        document.dispatchEvent(new KeyboardEvent('keydown', { key, keyCode, bubbles: true }));
     }
 }
 
@@ -81,7 +91,6 @@ function createActionButton(type, title, actionType, row) {
 }
 
 function injectActionButtons() {
-    // Target both Holdings and Positions tables
     const rows = document.querySelectorAll('.holdings table tbody tr, .positions table tbody tr');
 
     rows.forEach(row => {
@@ -91,7 +100,6 @@ function injectActionButtons() {
         const container = document.createElement('div');
         container.className = BTN_CONTAINER_CLASS;
 
-        // Create buttons
         const buyBtn = createActionButton('buy', 'Add to Basket (Buy)', 'Add', row);
         const depthBtn = createActionButton('depth', 'Market Depth', 'Market depth', row);
         const chartBtn = createActionButton('chart', 'Open Chart', 'Chart', row);
@@ -100,7 +108,6 @@ function injectActionButtons() {
         container.appendChild(depthBtn);
         container.appendChild(chartBtn);
 
-        // Append to the instrument link or cell
         const target = instrumentCell.querySelector('a.initial, .tradingsymbol');
         if (target) {
             target.appendChild(container);
@@ -110,9 +117,8 @@ function injectActionButtons() {
     });
 }
 
-// Observe changes to handle dynamic content (AJAX loading/navigation)
+// Observe changes and inject
 const observer = new MutationObserver(() => injectActionButtons());
 observer.observe(document.body, { childList: true, subtree: true });
 
-// Run immediately
 injectActionButtons();
