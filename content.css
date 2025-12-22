@@ -34,24 +34,7 @@
 
 .kite-btn:active {
     transform: scale(0.92);
-}
-
-.btn-buy {
-    background-color: #4184f3;
-}
-
-/* Kite Blue (Buy) */
-.btn-chart {
-    background-color: #00bcd4;
-}
-
-/* Cyan (Chart) */
-.btn-depth {
-    background-color: #ff9800;
-}
-
-/* Orange (Depth) */
-
+}   
 /* Ensure the button doesn't affect the link layout too much */
 .instrument a.initial {
     display: inline-flex !important;

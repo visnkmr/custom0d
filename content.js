@@ -6,7 +6,9 @@ const ICONS = {
     buy: `<span>A</span>`,
     chart: `<span>C</span>`,
     depth: `<span>MD</span>`,
-    breakdown: `<span>B</span>`
+    breakdown: `<span>B</span>`,
+    fundamentals: `<span>F</span>`,
+    technicals: `<span>T</span>`
 };
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -66,6 +68,24 @@ async function triggerKiteAction(row, actionType) {
                 (el.innerText || '').toLowerCase().includes("breakdown")
             );
         }
+    }else if (actionType === 'Fundamentals') {
+        // Based on user provided HTML: <span class="icon icon-trending-up"></span> Chart
+        target = document.querySelector('img[alt="Tijori logo"]')?.closest("a");
+        if (!target) {
+            // Fallback search by text
+            target = Array.from(document.querySelectorAll('.table-menu-content a')).find(el =>
+                (el.innerText || '').toLowerCase().includes("fundamentals")
+            );
+        }
+    }else if (actionType === 'Technicals') {
+        // Based on user provided HTML: <span class="icon icon-trending-up"></span> Chart
+        target = document.querySelector('img[alt="Steak logo"]')?.closest("a");
+        if (!target) {
+            // Fallback search by text
+            target = Array.from(document.querySelectorAll('.table-menu-content a')).find(el =>
+                (el.innerText || '').toLowerCase().includes("technicals")
+            );
+        }
     }
 
     if (target) {
@@ -114,11 +134,15 @@ function injectActionButtons() {
         const depthBtn = createActionButton('depth', 'Market Depth', 'Market depth', row);
         const chartBtn = createActionButton('chart', 'Open Chart', 'Chart', row);
         const breakdownBtn = createActionButton('breakdown', 'Open Breakdown', 'Breakdown', row);
+        const fundamentalsBtn = createActionButton('fundamentals', 'Open Fundamentals', 'Fundamentals', row);
+        const technicalsBtn = createActionButton('technicals', 'Open Technicals', 'Technicals', row);
 
         container.appendChild(buyBtn);
         container.appendChild(depthBtn);
         container.appendChild(chartBtn);
         container.appendChild(breakdownBtn);
+        container.appendChild(fundamentalsBtn);
+        container.appendChild(technicalsBtn);
 
         const target = instrumentCell.querySelector('a.initial, .tradingsymbol');
         if (target) {
