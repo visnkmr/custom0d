@@ -1,0 +1,63 @@
+.kite-action-btns {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 12px;
+    vertical-align: middle;
+}
+
+.kite-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
+    /* Hidden by default, shown on row hover */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.instrument:hover .kite-btn {
+    opacity: 0.85;
+}
+
+.kite-btn:hover {
+    opacity: 1 !important;
+    transform: scale(1.15);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
+}
+
+.kite-btn:active {
+    transform: scale(0.92);
+}
+
+.btn-buy {
+    background-color: #4184f3;
+}
+
+/* Kite Blue (Buy) */
+.btn-chart {
+    background-color: #00bcd4;
+}
+
+/* Cyan (Chart) */
+.btn-depth {
+    background-color: #ff9800;
+}
+
+/* Orange (Depth) */
+
+/* Ensure the button doesn't affect the link layout too much */
+.instrument a.initial {
+    display: inline-flex !important;
+    align-items: center;
+}
+
+.kite-btn svg {
+    pointer-events: none;
+}

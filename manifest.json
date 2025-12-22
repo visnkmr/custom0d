@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Kite Custom Holdings Plus",
+  "version": "1.0",
+  "description": "Adds a plus button to Zerodha Kite holdings to quickly purchase items.",
+  "permissions": ["activeTab"],
+  "content_scripts": [
+    {
+      "matches": ["https://kite.zerodha.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"]
+    }
+  ]
+}
