@@ -158,3 +158,32 @@ const observer = new MutationObserver(() => injectActionButtons());
 observer.observe(document.body, { childList: true, subtree: true });
 
 injectActionButtons();
+
+// Observe orders notifications count for changes
+function observeOrdersNotificationsCount() {
+    const span = document.querySelector('.orders-notifications-count .count');
+    if (span) {
+        let previousValue = span.textContent || span.innerText;
+        const spanObserver = new MutationObserver(() => {
+            const currentValue = span.textContent || span.innerText;
+            if (currentValue !== previousValue) {
+                console.log(`Orders notifications count changed: ${previousValue} -> ${currentValue}`);
+                chrome.runtime.sendMessage({ action: 'notify', value: currentValue, type: 'orders_count' });
+                previousValue = currentValue;
+            }
+        });
+        spanObserver.observe(span, { childList: true, subtree: true, characterData: true });
+    } else {
+        // If not found, observe body for when it appears
+        const bodyObserver = new MutationObserver(() => {
+            const span = document.querySelector('.orders-notifications-count .count');
+            if (span) {
+                bodyObserver.disconnect();
+                observeOrdersNotificationsCount();
+            }
+        });
+        bodyObserver.observe(document.body, { childList: true, subtree: true });
+    }
+}
+
+observeOrdersNotificationsCount();
