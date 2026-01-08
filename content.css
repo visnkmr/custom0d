@@ -34,7 +34,8 @@
 
 .kite-btn:active {
     transform: scale(0.92);
-}   
+}
+
 /* Ensure the button doesn't affect the link layout too much */
 .instrument a.initial {
     display: inline-flex !important;
@@ -71,4 +72,15 @@
     color: #f44336;
     background: #ffebee;
     border-color: #ffcdd2;
+}
+
+.kite-total-summary {
+    font-size: 13px;
+    background: #34495e;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-left: 10px;
+    font-weight: 500;
+    vertical-align: middle;
 }

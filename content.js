@@ -182,8 +182,53 @@ function updateRowInfo(row) {
     }
 }
 
+/**
+ * Calculates total invested for all positions and updates the header.
+ */
+function updatePositionsTotalSummary() {
+    const isPositionsPage = window.location.pathname.includes('/positions');
+    if (!isPositionsPage) return;
+
+    const rows = document.querySelectorAll('.positions table tbody tr');
+    let totalInvested = 0;
+
+    rows.forEach(row => {
+        const qtyCell = row.querySelector('td[data-label="Qty."], td.qty');
+        const avgCell = row.querySelector('td[data-label="Avg."]');
+        if (qtyCell && avgCell) {
+            const qty = parseFloat(qtyCell.textContent.replace(/,/g, '')) || 0;
+            const avg = parseFloat(avgCell.textContent.replace(/,/g, '')) || 0;
+            totalInvested += (qty * avg);
+        }
+    });
+
+    const header = Array.from(document.querySelectorAll('h3.page-title.small')).find(h => h.textContent.includes('Positions'));
+    if (header) {
+        let summaryBadge = header.querySelector('.kite-total-summary');
+        if (!summaryBadge) {
+            summaryBadge = document.createElement('span');
+            summaryBadge.className = 'kite-total-summary';
+            header.appendChild(summaryBadge);
+        }
+        summaryBadge.textContent = `Total Invested: ${totalInvested.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+    }
+}
+
 function injectActionButtons() {
     const rows = document.querySelectorAll('.holdings table tbody tr, .positions table tbody tr, .orderbook table tbody tr');
+
+    // 1. Setup Positions Header Summary (On Load + Hover Refresh)
+    const isPositionsPage = window.location.pathname.includes('/positions');
+    const header = Array.from(document.querySelectorAll('h3.page-title.small')).find(h => h.textContent.includes('Positions'));
+
+    if (isPositionsPage && header && !header.dataset.listenerAttached) {
+        // Initial delayed calculation to ensure page is "completely loaded"
+        setTimeout(updatePositionsTotalSummary, 1500);
+
+        // Refresh only on hover
+        header.addEventListener('mouseenter', updatePositionsTotalSummary);
+        header.dataset.listenerAttached = 'true';
+    }
 
     rows.forEach(row => {
         const instrumentCell = row.querySelector('td.instrument');
@@ -217,10 +262,10 @@ function injectActionButtons() {
             instrumentCell.appendChild(container);
         }
 
-        // 1. Calculate and show on load once
+        // 2. Individual row info: Show on load once
         updateRowInfo(row);
 
-        // 2. Update value only on mouseover
+        // 3. Individual row info: Update value on mouseover
         row.addEventListener('mouseenter', () => updateRowInfo(row));
     });
 }
