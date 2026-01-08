@@ -172,20 +172,20 @@
     font-size: 11px;
     background: #34495e;
     color: white;
-    padding: 6px 14px;
-    border-radius: 6px;
-    margin-left: 12px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    margin-left: 15px;
     font-weight: 500;
-    vertical-align: middle;
+    vertical-align: top;
     display: inline-flex;
-    flex-wrap: nowrap;
-    gap: 16px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    flex-direction: column;
+    gap: 6px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
     cursor: help;
     transition: background 0.2s;
     position: relative;
     z-index: 1000;
-    min-width: fit-content;
+    min-width: 280px;
 }
 
 .kite-total-summary:hover {
@@ -193,27 +193,46 @@
 }
 
 .kite-summary-cat {
-    border-right: 1px solid rgba(255, 255, 255, 0.2);
-    padding-right: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 4px;
     display: flex;
     align-items: center;
-    gap: 4px;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
 }
 
 .kite-summary-cat:last-child {
-    border-right: none;
-    padding-right: 0;
+    border-bottom: none;
+    padding-bottom: 0;
 }
 
 .kite-summary-label {
-    opacity: 0.8;
+    opacity: 0.9;
     color: #9ec9f5;
     text-transform: uppercase;
-    font-size: 9px;
-    font-weight: 700;
+    font-size: 10px;
+    font-weight: 800;
+    min-width: 50px;
 }
 
 .kite-summary-val {
-    font-family: monospace;
+    font-family: 'Roboto Mono', monospace;
     font-weight: 600;
+    display: flex;
+    gap: 8px;
+    flex: 1;
+    justify-content: flex-end;
+}
+
+.kite-summary-pnl {
+    font-weight: 700;
+}
+
+.kite-summary-pnl.text-green {
+    color: #76ff03;
+}
+
+.kite-summary-pnl.text-red {
+    color: #ff5252;
 }

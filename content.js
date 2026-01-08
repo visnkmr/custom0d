@@ -1,4 +1,4 @@
-console.log("Kite Custom Actions Extension - V4 - Improved Selectors");
+console.log("Kite Custom Actions Extension - V5 - Performance Optimized");
 
 const BTN_CONTAINER_CLASS = 'kite-action-btns';
 
@@ -43,74 +43,83 @@ function setTagMap(map) {
 }
 
 /**
+ * Throttles function calls to prevent main thread blocking
+ */
+function throttle(func, limit) {
+    let inThrottle;
+    return function () {
+        const args = arguments;
+        const context = this;
+        if (!inThrottle) {
+            func.apply(context, args);
+            inThrottle = true;
+            setTimeout(() => inThrottle = false, limit);
+        }
+    }
+}
+
+/**
+ * Debounces function calls
+ */
+function debounce(func, wait) {
+    let timeout;
+    return function () {
+        const context = this;
+        const args = arguments;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), wait);
+    };
+}
+
+/**
  * Executes a Kite action by simulating the exact hover and click sequence.
  */
 async function triggerKiteAction(row, actionType) {
-    // 1. Locate the menu button (three dots)
     const menuBtn = row.querySelector(".table-menu-button, .icon-more-vertical");
-    if (!menuBtn) {
-        console.error("Kite menu button not found in row");
-        return;
-    }
+    if (!menuBtn) return;
 
-    // 2. Trigger mouseover on the row and then the menu button
     row.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, view: window }));
     await delay(10);
     menuBtn.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, view: window }));
     await delay(10);
-
-    // 3. Click the menu button to open the dropdown
     menuBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, view: window, cancelable: true }));
 
-    // 4. Wait for the dropdown to appear
     await delay(50);
-
-    // 5. Look for target element using icon classes (more reliable than text)
     let target = null;
 
     if (actionType === 'Add') {
         target = document.querySelector('[data-label="Add"]');
     } else if (actionType === 'Market depth') {
-        // Based on user provided HTML: <span class="icon icon-align-center"></span>Market depth
         target = document.querySelector(".icon-align-center")?.closest("a");
         if (!target) {
-            // Fallback search by text
             target = Array.from(document.querySelectorAll('.table-menu-content a')).find(el =>
                 (el.innerText || '').toLowerCase().includes("market depth")
             );
         }
     } else if (actionType === 'Chart') {
-        // Based on user provided HTML: <span class="icon icon-trending-up"></span> Chart
         target = document.querySelector(".icon-trending-up")?.closest("a");
         if (!target) {
-            // Fallback search by text
             target = Array.from(document.querySelectorAll('.table-menu-content a')).find(el =>
                 (el.innerText || '').toLowerCase().includes("chart")
             );
         }
     } else if (actionType === 'Breakdown') {
-        // Based on user provided HTML: <span class="icon icon-trending-up"></span> Chart
         target = document.querySelector(".icon-console")?.closest("a");
         if (!target) {
-            // Fallback search by text
             target = Array.from(document.querySelectorAll('.table-menu-content a')).find(el =>
                 (el.innerText || '').toLowerCase().includes("breakdown")
             );
         }
     } else if (actionType === 'Fundamentals') {
-        // Based on user provided HTML: <span class="icon icon-trending-up"></span> Chart
         target = document.querySelector('img[alt="Tijori logo"]')?.closest("a");
         if (!target) {
-            // Fallback search by text
             target = Array.from(document.querySelectorAll('.table-menu-content a')).find(el =>
                 (el.innerText || '').toLowerCase().includes("fundamentals")
             );
         }
     } else if (actionType === 'Technicals') {
-        // Based on user provided HTML: <span class="icon icon-trending-up"></span> Chart
         target = document.querySelector('img[alt="Steak logo"]')?.closest("a");
         if (!target) {
-            // Fallback search by text
             target = Array.from(document.querySelectorAll('.table-menu-content a')).find(el =>
                 (el.innerText || '').toLowerCase().includes("technicals")
             );
@@ -118,15 +127,11 @@ async function triggerKiteAction(row, actionType) {
     }
 
     if (target) {
-        console.log(`Clicking ${actionType} action`);
         target.click();
-
-        // Final cleanup: move mouse away to allow menu to close if it doesn't automatically
         setTimeout(() => {
             menuBtn.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }));
         }, 100);
     } else {
-        console.warn(`Action "${actionType}" not found in dropdown. Falling back to key simulation.`);
         row.click();
         const key = actionType === 'Add' ? 'b' : (actionType === 'Chart' ? 'c' : 'd');
         const keyCode = actionType === 'Add' ? 66 : (actionType === 'Chart' ? 67 : 68);
@@ -150,9 +155,17 @@ function createActionButton(type, title, actionType, row) {
 }
 
 /**
- * Updates the custom info badge for a specific row.
+ * Updates row info with requestIdleCallback or setTimeout to prevent blocking
  */
 function updateRowInfo(row) {
+    if (window.requestIdleCallback) {
+        window.requestIdleCallback(() => processRowInfo(row));
+    } else {
+        setTimeout(() => processRowInfo(row), 0);
+    }
+}
+
+function processRowInfo(row) {
     const instrumentCell = row.querySelector('td.instrument');
     if (!instrumentCell) return;
 
@@ -167,21 +180,15 @@ function updateRowInfo(row) {
     let foundData = false;
     let badgeClass = 'kite-pnl-info';
 
-    // 1. Check if it's the Holdings Page
     const investedCell = row.querySelector('td[data-label="Invested"]');
     const dayChgCell = row.querySelector('td[data-label="Day chg."]');
-
-    // 2. Check if it's the Positions Page
     const qtyCellPos = row.querySelector('td[data-label="Qty."], td.qty');
     const avgCellPos = row.querySelector('td[data-label="Avg."]');
-
-    // 3. Check if it's the Orders Page
     const qtyCellOrd = row.querySelector('td[data-label="Qty"], td[data-label="Quantity"]');
     const priceCellOrd = row.querySelector('td[data-label="Price"], td[data-label="Avg. Price"]');
     const ltpCellOrd = row.querySelector('td[data-label="LTP"]');
 
     if (investedCell && dayChgCell) {
-        // Holdings Page: Show Day's Profit (Day Change % * Invested)
         const invested = parseFloat(investedCell.textContent.replace(/,/g, '')) || 0;
         const dayChgText = dayChgCell.textContent.replace(/%|,/g, '').trim();
         const dayChgPct = parseFloat(dayChgText) || 0;
@@ -193,7 +200,6 @@ function updateRowInfo(row) {
         badgeClass += isPositive ? ' text-green' : ' text-red';
         foundData = true;
     } else if (qtyCellPos && avgCellPos && !priceCellOrd) {
-        // Positions Page: Show Total Invested (Qty * Avg)
         const qty = parseFloat(qtyCellPos.textContent.replace(/,/g, '')) || 0;
         const avg = parseFloat(avgCellPos.textContent.replace(/,/g, '')) || 0;
         const invested = qty * avg;
@@ -202,7 +208,6 @@ function updateRowInfo(row) {
         tooltip = `Total Invested = Qty (${qty}) * Avg (${avg.toLocaleString('en-IN')})`;
         foundData = true;
     } else if (qtyCellOrd && priceCellOrd) {
-        // Orders Page: Show Locked Margin (Qty * Price, /5 for MIS)
         const qtyText = qtyCellOrd.textContent.split('/')[1] || qtyCellOrd.textContent.split('/')[0];
         const qty = parseFloat(qtyText.replace(/,/g, '')) || 0;
         const price = parseFloat(priceCellOrd.textContent.replace(/,/g, '')) || 0;
@@ -216,7 +221,6 @@ function updateRowInfo(row) {
         tooltip = `Locked Margin = Qty (${qty}) * Price (${price.toLocaleString('en-IN')}) ${isMIS ? '/ 5 (MIS)' : '(CNC)'}`;
         foundData = true;
 
-        // Add % Diff next to LTP if available
         if (ltpCellOrd) {
             const ltp = parseFloat(ltpCellOrd.textContent.replace(/,/g, '')) || 0;
             if (ltp > 0 && price > 0) {
@@ -238,7 +242,6 @@ function updateRowInfo(row) {
             infoBadge = document.createElement('span');
             container.prepend(infoBadge);
         }
-
         infoBadge.textContent = displayValue;
         infoBadge.className = badgeClass;
         infoBadge.title = tooltip;
@@ -246,63 +249,66 @@ function updateRowInfo(row) {
 }
 
 /**
- * Calculates total invested and current value for holdings and updates the header.
+ * Optimized Summary calculation
  */
-function updateHoldingsTotalSummary() {
+const updateHoldingsTotalSummary = debounce(() => {
     const isHoldingsPage = window.location.pathname.includes('/holdings') || document.querySelector('.holdings-page');
     if (!isHoldingsPage) return;
 
-    const rows = document.querySelectorAll('.holdings table tbody tr');
-    let totalInvested = 0;
-    let totalCurrent = 0;
+    if (window.requestIdleCallback) {
+        window.requestIdleCallback(() => processHoldingsSummary());
+    } else {
+        setTimeout(() => processHoldingsSummary(), 100);
+    }
+}, 500);
 
-    // Tag-wise totals
+function processHoldingsSummary() {
+    const rows = document.querySelectorAll('.holdings table tbody tr');
+    if (rows.length === 0) return;
+
+    let totalInvested = 0, totalCurrent = 0, totalDayP = 0;
     const tagTotals = {};
     AVAILABLE_TAGS.forEach(tag => {
-        if (tag !== 'NONE') tagTotals[tag] = { inv: 0, cur: 0 };
+        if (tag !== 'NONE') tagTotals[tag] = { inv: 0, cur: 0, dayP: 0 };
     });
 
     const excludeList = getExcludeList();
     const tagMap = getTagMap();
 
-
-
-
     rows.forEach(row => {
         const symbol = (row.querySelector('.tradingsymbol') || row.querySelector('.instrument a span') || row.querySelector('.instrument span'))?.textContent.trim();
         const isExcluded = symbol && excludeList.includes(symbol);
-        if (isExcluded) {
-            row.classList.add('kite-excluded-row');
-        } else {
-            row.classList.remove('kite-excluded-row');
-        }
+
+        if (isExcluded) row.classList.add('kite-excluded-row');
+        else row.classList.remove('kite-excluded-row');
 
         const investedCell = row.querySelector('td[data-label="Invested"]');
         const currentValCell = row.querySelector('td[data-label="Cur. val"]');
+        const dayChangeCell = row.querySelector('td[data-label="Day chg."]');
 
         if (investedCell && currentValCell) {
             const inv = parseFloat(investedCell.textContent.replace(/,/g, '')) || 0;
             const cur = parseFloat(currentValCell.textContent.replace(/,/g, '')) || 0;
+            const dayChgPct = dayChangeCell ? parseFloat(dayChangeCell.textContent.replace(/%|,/g, '')) || 0 : 0;
+            const rowDayP = (inv * dayChgPct) / 100;
 
             if (!isExcluded) {
                 totalInvested += inv;
                 totalCurrent += cur;
+                totalDayP += rowDayP;
             }
 
-            // Add to tag total if a tag is set
             const tag = tagMap[symbol];
             if (tag && tag !== 'NONE' && tagTotals[tag]) {
                 tagTotals[tag].inv += inv;
                 tagTotals[tag].cur += cur;
+                tagTotals[tag].dayP += rowDayP;
             }
         }
     });
 
-    const headerSelectors = ['h3.page-title', '.page-header h3', 'h3'];
-    const header = Array.from(document.querySelectorAll(headerSelectors.join(',')))
+    const header = Array.from(document.querySelectorAll('h3.page-title, .page-header h3, h3'))
         .find(h => h.textContent.toUpperCase().includes('HOLDINGS'));
-
-
 
     if (header) {
         let summaryBadge = header.querySelector('.kite-total-summary');
@@ -312,20 +318,31 @@ function updateHoldingsTotalSummary() {
             header.appendChild(summaryBadge);
         }
 
+        const formatMoney = (val) => val.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+        const formatPnl = (val) => {
+            const isPos = val >= 0;
+            return `<span class="kite-summary-pnl ${isPos ? 'text-green' : 'text-red'}">${isPos ? '+' : ''}${formatMoney(val)}</span>`;
+        };
+
         let html = `
             <div class="kite-summary-cat">
-                <span class="kite-summary-label">TOTAL:</span>
-                <span class="kite-summary-val">${totalInvested.toLocaleString('en-IN', { maximumFractionDigits: 0 })} | ${totalCurrent.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                <span class="kite-summary-label">TOTAL</span>
+                <span class="kite-summary-val">
+                    <span>${formatMoney(totalInvested)}</span> / <span>${formatMoney(totalCurrent)}</span>
+                    ${formatPnl(totalDayP)}
+                </span>
             </div>
         `;
 
-        // Add cats that have values
         Object.entries(tagTotals).forEach(([tag, vals]) => {
             if (vals.inv > 0) {
                 html += `
                     <div class="kite-summary-cat">
-                        <span class="kite-summary-label">${tag}:</span>
-                        <span class="kite-summary-val">${vals.inv.toLocaleString('en-IN', { maximumFractionDigits: 0 })} | ${vals.cur.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                        <span class="kite-summary-label">${tag}</span>
+                        <span class="kite-summary-val">
+                            <span>${formatMoney(vals.inv)}</span> / <span>${formatMoney(vals.cur)}</span>
+                            ${formatPnl(vals.dayP)}
+                        </span>
                     </div>
                 `;
             }
@@ -337,14 +354,10 @@ function updateHoldingsTotalSummary() {
     }
 }
 
-/**
- * Calculates total margin for open orders and updates the header.
- */
-function updateOrdersTotalMargin() {
+const updateOrdersTotalMargin = debounce(() => {
     const isOrdersPage = window.location.pathname.includes('/orders');
     if (!isOrdersPage) return;
 
-    // Use specific section selector to only get Open Orders
     const openOrdersTable = document.querySelector('.orders table');
     if (!openOrdersTable) return;
 
@@ -360,10 +373,8 @@ function updateOrdersTotalMargin() {
             const qtyText = qtyCell.textContent.split('/')[1] || qtyCell.textContent.split('/')[0];
             const qty = parseFloat(qtyText.replace(/,/g, '')) || 0;
             const price = parseFloat(priceCell.textContent.replace(/,/g, '')) || 0;
-
             const isMIS = productCell && productCell.textContent.toLowerCase().includes('mis');
             const marginMultiplier = isMIS ? 0.2 : 1.0;
-
             totalMargin += (qty * price * marginMultiplier);
         }
     });
@@ -378,12 +389,9 @@ function updateOrdersTotalMargin() {
         }
         summaryBadge.textContent = `Total Margin: ${totalMargin.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
     }
-}
+}, 500);
 
-/**
- * Calculates total invested for all positions and updates the header.
- */
-function updatePositionsTotalSummary() {
+const updatePositionsTotalSummary = debounce(() => {
     const isPositionsPage = window.location.pathname.includes('/positions');
     if (!isPositionsPage) return;
 
@@ -410,190 +418,129 @@ function updatePositionsTotalSummary() {
         }
         summaryBadge.textContent = `Total Invested: ${totalInvested.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
     }
-}
+}, 500);
 
-function injectActionButtons() {
-    const rows = document.querySelectorAll('.holdings table tbody tr, .positions table tbody tr, .orderbook table tbody tr, .orders table tbody tr');
+/**
+ * Main Injection logic throttled and pushed to idle periods
+ */
+const injectActionButtons = throttle(() => {
+    if (window.requestIdleCallback) {
+        window.requestIdleCallback(() => processInjection());
+    } else {
+        setTimeout(() => processInjection(), 0);
+    }
+}, 200);
 
-    // 1. Setup Header Summaries (On Load + Hover Refresh)
+function processInjection() {
     const isHoldingsPage = window.location.pathname.includes('/holdings') || document.querySelector('.holdings-page');
     const isPositionsPage = window.location.pathname.includes('/positions') || document.querySelector('.positions-page');
     const isOrdersPage = window.location.pathname.includes('/orders') || document.querySelector('.orders-page');
 
-
-
-
-    const findHeader = (text, selectors) => {
-        for (const sel of selectors) {
-            const h = Array.from(document.querySelectorAll(sel)).find(el => el.textContent.toUpperCase().includes(text.toUpperCase()));
-            if (h) return h;
-        }
-        return null;
-    };
-
-    const headerSelectors = ['h3.page-title', '.page-header h3', 'h3'];
-
-    // Ensure summaries are updated if page is ready
     if (isHoldingsPage) updateHoldingsTotalSummary();
     if (isPositionsPage) updatePositionsTotalSummary();
     if (isOrdersPage) updateOrdersTotalMargin();
 
-    // Attach hover listeners (only once)
-    const holdHeader = findHeader('Holdings', headerSelectors);
-    if (holdHeader && !holdHeader.dataset.listenerAttached) {
-        holdHeader.addEventListener('mouseenter', updateHoldingsTotalSummary);
-        holdHeader.dataset.listenerAttached = 'true';
-    }
-
-    const posHeader = findHeader('Positions', headerSelectors);
-    if (posHeader && !posHeader.dataset.listenerAttached) {
-        posHeader.addEventListener('mouseenter', updatePositionsTotalSummary);
-        posHeader.dataset.listenerAttached = 'true';
-    }
-
-    const ordHeader = findHeader('Open orders', headerSelectors);
-    if (ordHeader && !ordHeader.dataset.listenerAttached) {
-        ordHeader.addEventListener('mouseenter', updateOrdersTotalMargin);
-        ordHeader.dataset.listenerAttached = 'true';
-    }
+    const rows = document.querySelectorAll('.holdings table tbody tr, .positions table tbody tr, .orderbook table tbody tr, .orders table tbody tr');
 
     rows.forEach(row => {
         const instrumentCell = row.querySelector('td.instrument');
         if (!instrumentCell) return;
 
-        // Handle exclusion for holdings (checked separately from action buttons)
+        // Exclusion toggle
         if (isHoldingsPage && !instrumentCell.querySelector('.kite-exclude-btn')) {
-            const excludeList = getExcludeList();
             const symbol = (row.querySelector('.tradingsymbol') || row.querySelector('.instrument a span') || row.querySelector('.instrument span'))?.textContent.trim();
             if (symbol) {
+                const excludeList = getExcludeList();
                 const isExcluded = excludeList.includes(symbol);
                 if (isExcluded) row.classList.add('kite-excluded-row');
 
                 const excludeBtn = document.createElement('button');
                 excludeBtn.className = `kite-exclude-btn ${isExcluded ? 'excluded' : ''}`;
-                excludeBtn.innerHTML = '&#8854;'; // Minus symbol
-                excludeBtn.title = isExcluded ? 'Include in calculation' : 'Exclude from calculation';
-
+                excludeBtn.innerHTML = '&#8854;';
                 excludeBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    e.preventDefault();
                     const currentList = getExcludeList();
                     if (currentList.includes(symbol)) {
                         setExcludeList(currentList.filter(s => s !== symbol));
                         excludeBtn.classList.remove('excluded');
-                        row.classList.remove('kite-excluded-row');
                     } else {
                         setExcludeList([...currentList, symbol]);
                         excludeBtn.classList.add('excluded');
-                        row.classList.add('kite-excluded-row');
                     }
                     updateHoldingsTotalSummary();
                 });
-
                 instrumentCell.prepend(excludeBtn);
             }
         }
 
-        // Handle tagging for holdings
+        // Tagging
         if (isHoldingsPage && !instrumentCell.querySelector('.kite-tag-select')) {
-            const tagMap = getTagMap();
             const symbol = (row.querySelector('.tradingsymbol') || row.querySelector('.instrument a span') || row.querySelector('.instrument span'))?.textContent.trim();
             if (symbol) {
+                const tagMap = getTagMap();
                 const currentTag = tagMap[symbol] || 'NONE';
                 const select = document.createElement('select');
                 select.className = 'kite-tag-select';
-
                 AVAILABLE_TAGS.forEach(tag => {
                     const opt = document.createElement('option');
-                    opt.value = tag;
-                    opt.textContent = tag;
+                    opt.value = tag; opt.textContent = tag;
                     if (tag === currentTag) opt.selected = true;
                     select.appendChild(opt);
                 });
-
                 select.addEventListener('change', (e) => {
-                    const newTag = e.target.value;
                     const currentMap = getTagMap();
-                    currentMap[symbol] = newTag;
+                    currentMap[symbol] = e.target.value;
                     setTagMap(currentMap);
                     updateHoldingsTotalSummary();
                 });
-
                 instrumentCell.prepend(select);
             }
         }
 
-        let container = instrumentCell.querySelector(`.${BTN_CONTAINER_CLASS}`);
-        if (container) return; // Action buttons already injected
+        // Action Buttons
+        if (!instrumentCell.querySelector(`.${BTN_CONTAINER_CLASS}`)) {
+            const container = document.createElement('div');
+            container.className = BTN_CONTAINER_CLASS;
+            container.appendChild(createActionButton('buy', 'Add', 'Add', row));
+            container.appendChild(createActionButton('depth', 'Market Depth', 'Market depth', row));
+            container.appendChild(createActionButton('chart', 'Open Chart', 'Chart', row));
+            container.appendChild(createActionButton('breakdown', 'Open Breakdown', 'Breakdown', row));
+            container.appendChild(createActionButton('fundamentals', 'Open Fundamentals', 'Fundamentals', row));
+            container.appendChild(createActionButton('technicals', 'Open Technicals', 'Technicals', row));
 
-        // Create container and buttons
-        container = document.createElement('div');
-        container.className = BTN_CONTAINER_CLASS;
+            const target = instrumentCell.querySelector('a.initial, .tradingsymbol');
+            if (target) target.appendChild(container);
+            else instrumentCell.appendChild(container);
 
-        const buyBtn = createActionButton('buy', 'Add', 'Add', row);
-        const depthBtn = createActionButton('depth', 'Market Depth', 'Market depth', row);
-        const chartBtn = createActionButton('chart', 'Open Chart', 'Chart', row);
-        const breakdownBtn = createActionButton('breakdown', 'Open Breakdown', 'Breakdown', row);
-        const fundamentalsBtn = createActionButton('fundamentals', 'Open Fundamentals', 'Fundamentals', row);
-        const technicalsBtn = createActionButton('technicals', 'Open Technicals', 'Technicals', row);
-
-        container.appendChild(buyBtn);
-        container.appendChild(depthBtn);
-        container.appendChild(chartBtn);
-        container.appendChild(breakdownBtn);
-        container.appendChild(fundamentalsBtn);
-        container.appendChild(technicalsBtn);
-
-        const target = instrumentCell.querySelector('a.initial, .tradingsymbol');
-        if (target) {
-            target.appendChild(container);
-        } else {
-            instrumentCell.appendChild(container);
+            updateRowInfo(row);
         }
-
-        // 2. Individual row info: Show on load once
-        updateRowInfo(row);
-
-        // 2.5 Extra delay for Orders page (LTP sometimes loads late)
-        if (isOrdersPage) {
-            setTimeout(() => updateRowInfo(row), 1500);
-        }
-
-        // 3. Individual row info: Update value on mouseover
-        row.addEventListener('mouseenter', () => updateRowInfo(row));
     });
 }
 
-// Observe changes and inject
-const observer = new MutationObserver(() => injectActionButtons());
+// Global Observers with limited scope
+const observer = new MutationObserver(debounce(() => {
+    injectActionButtons();
+}, 100));
+
 observer.observe(document.body, { childList: true, subtree: true });
 
-injectActionButtons();
+// Initial load after complete page load
+window.addEventListener('load', () => {
+    setTimeout(injectActionButtons, 1000);
+});
 
-// Observe orders notifications count for changes
+// Orders notification count observer
 function observeOrdersNotificationsCount() {
     const span = document.querySelector('.orders-notifications-count .count');
     if (span) {
         let previousValue = span.textContent || span.innerText;
-        const spanObserver = new MutationObserver(() => {
+        new MutationObserver(() => {
             const currentValue = span.textContent || span.innerText;
             if (currentValue !== previousValue) {
-                console.log(`Orders notifications count changed: ${previousValue} -> ${currentValue}`);
                 chrome.runtime.sendMessage({ action: 'notify', value: currentValue, type: 'orders_count' });
                 previousValue = currentValue;
             }
-        });
-        spanObserver.observe(span, { childList: true, subtree: true, characterData: true });
-    } else {
-        // If not found, observe body for when it appears
-        const bodyObserver = new MutationObserver(() => {
-            const span = document.querySelector('.orders-notifications-count .count');
-            if (span) {
-                bodyObserver.disconnect();
-                observeOrdersNotificationsCount();
-            }
-        });
-        bodyObserver.observe(document.body, { childList: true, subtree: true });
+        }).observe(span, { childList: true, subtree: true, characterData: true });
     }
 }
 
