@@ -59,7 +59,7 @@ async function triggerKiteAction(row, actionType) {
                 (el.innerText || '').toLowerCase().includes("chart")
             );
         }
-    }else if (actionType === 'Breakdown') {
+    } else if (actionType === 'Breakdown') {
         // Based on user provided HTML: <span class="icon icon-trending-up"></span> Chart
         target = document.querySelector(".icon-console")?.closest("a");
         if (!target) {
@@ -68,7 +68,7 @@ async function triggerKiteAction(row, actionType) {
                 (el.innerText || '').toLowerCase().includes("breakdown")
             );
         }
-    }else if (actionType === 'Fundamentals') {
+    } else if (actionType === 'Fundamentals') {
         // Based on user provided HTML: <span class="icon icon-trending-up"></span> Chart
         target = document.querySelector('img[alt="Tijori logo"]')?.closest("a");
         if (!target) {
@@ -77,7 +77,7 @@ async function triggerKiteAction(row, actionType) {
                 (el.innerText || '').toLowerCase().includes("fundamentals")
             );
         }
-    }else if (actionType === 'Technicals') {
+    } else if (actionType === 'Technicals') {
         // Based on user provided HTML: <span class="icon icon-trending-up"></span> Chart
         target = document.querySelector('img[alt="Steak logo"]')?.closest("a");
         if (!target) {
@@ -120,17 +120,83 @@ function createActionButton(type, title, actionType, row) {
     return btn;
 }
 
+/**
+ * Updates the custom info badge for a specific row.
+ */
+function updateRowInfo(row) {
+    const instrumentCell = row.querySelector('td.instrument');
+    if (!instrumentCell) return;
+
+    let container = instrumentCell.querySelector(`.${BTN_CONTAINER_CLASS}`);
+    if (!container) return;
+
+    let infoBadge = container.querySelector('.kite-pnl-info');
+
+    let displayValue = '';
+    let isPositive = true;
+    let tooltip = '';
+    let foundData = false;
+    let badgeClass = 'kite-pnl-info';
+
+    // Check if it's the Holdings Page
+    const investedCell = row.querySelector('td[data-label="Invested"]');
+    const dayChgCell = row.querySelector('td[data-label="Day chg."]');
+
+    if (investedCell && dayChgCell) {
+        // Holdings Page: Show Day's Profit (Day Change % * Invested)
+        const invested = parseFloat(investedCell.textContent.replace(/,/g, '')) || 0;
+        const dayChgText = dayChgCell.textContent.replace(/%|,/g, '').trim();
+        const dayChgPct = parseFloat(dayChgText) || 0;
+        const dayProfit = (invested * dayChgPct) / 100;
+
+        isPositive = dayProfit >= 0;
+        displayValue = `Day P: ${isPositive ? '+' : ''}${dayProfit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+        tooltip = `Day Profit = Invested (${invested.toLocaleString('en-IN')}) * Day Chg (${dayChgPct}%)`;
+        badgeClass += isPositive ? ' text-green' : ' text-red';
+        foundData = true;
+    } else {
+        // Positions Page: Show Total Invested (Qty * Avg)
+        const qtyCell = row.querySelector('td[data-label="Qty."], td.qty');
+        const avgCell = row.querySelector('td[data-label="Avg."]');
+
+        if (qtyCell && avgCell) {
+            const qty = parseFloat(qtyCell.textContent.replace(/,/g, '')) || 0;
+            const avg = parseFloat(avgCell.textContent.replace(/,/g, '')) || 0;
+            const invested = qty * avg;
+
+            displayValue = `Invested: ${invested.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+            tooltip = `Total Invested = Qty (${qty}) * Avg (${avg.toLocaleString('en-IN')})`;
+            foundData = true; // No green/red class for pure invested value
+        }
+    }
+
+    if (foundData) {
+        if (!infoBadge) {
+            infoBadge = document.createElement('span');
+            container.prepend(infoBadge);
+        }
+
+        infoBadge.textContent = displayValue;
+        infoBadge.className = badgeClass;
+        infoBadge.title = tooltip;
+    }
+}
+
 function injectActionButtons() {
     const rows = document.querySelectorAll('.holdings table tbody tr, .positions table tbody tr, .orderbook table tbody tr');
 
     rows.forEach(row => {
         const instrumentCell = row.querySelector('td.instrument');
-        if (!instrumentCell || instrumentCell.querySelector(`.${BTN_CONTAINER_CLASS}`)) return;
+        if (!instrumentCell) return;
 
-        const container = document.createElement('div');
+        let container = instrumentCell.querySelector(`.${BTN_CONTAINER_CLASS}`);
+        if (container) return; // Already injected
+
+        // Create container and buttons
+        container = document.createElement('div');
         container.className = BTN_CONTAINER_CLASS;
 
-        const buyBtn = createActionButton('buy', 'Add to Basket (Buy)', 'Add', row);
+        const buyBtn = createActionButton('buy', 'Add', 'Add', row);
         const depthBtn = createActionButton('depth', 'Market Depth', 'Market depth', row);
         const chartBtn = createActionButton('chart', 'Open Chart', 'Chart', row);
         const breakdownBtn = createActionButton('breakdown', 'Open Breakdown', 'Breakdown', row);
@@ -150,6 +216,9 @@ function injectActionButtons() {
         } else {
             instrumentCell.appendChild(container);
         }
+
+        // Add listener to calculate ONLY on mouse hover
+        row.addEventListener('mouseenter', () => updateRowInfo(row));
     });
 }
 
