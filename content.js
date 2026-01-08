@@ -138,9 +138,18 @@ function updateRowInfo(row) {
     let foundData = false;
     let badgeClass = 'kite-pnl-info';
 
-    // Check if it's the Holdings Page
+    // 1. Check if it's the Holdings Page
     const investedCell = row.querySelector('td[data-label="Invested"]');
     const dayChgCell = row.querySelector('td[data-label="Day chg."]');
+
+    // 2. Check if it's the Positions Page
+    const qtyCellPos = row.querySelector('td[data-label="Qty."], td.qty');
+    const avgCellPos = row.querySelector('td[data-label="Avg."]');
+
+    // 3. Check if it's the Orders Page
+    const qtyCellOrd = row.querySelector('td[data-label="Qty"], td[data-label="Quantity"]');
+    const priceCellOrd = row.querySelector('td[data-label="Price"], td[data-label="Avg. Price"]');
+    const ltpCellOrd = row.querySelector('td[data-label="LTP"]');
 
     if (investedCell && dayChgCell) {
         // Holdings Page: Show Day's Profit (Day Change % * Invested)
@@ -154,19 +163,44 @@ function updateRowInfo(row) {
         tooltip = `Day Profit = Invested (${invested.toLocaleString('en-IN')}) * Day Chg (${dayChgPct}%)`;
         badgeClass += isPositive ? ' text-green' : ' text-red';
         foundData = true;
-    } else {
+    } else if (qtyCellPos && avgCellPos && !priceCellOrd) {
         // Positions Page: Show Total Invested (Qty * Avg)
-        const qtyCell = row.querySelector('td[data-label="Qty."], td.qty');
-        const avgCell = row.querySelector('td[data-label="Avg."]');
+        const qty = parseFloat(qtyCellPos.textContent.replace(/,/g, '')) || 0;
+        const avg = parseFloat(avgCellPos.textContent.replace(/,/g, '')) || 0;
+        const invested = qty * avg;
 
-        if (qtyCell && avgCell) {
-            const qty = parseFloat(qtyCell.textContent.replace(/,/g, '')) || 0;
-            const avg = parseFloat(avgCell.textContent.replace(/,/g, '')) || 0;
-            const invested = qty * avg;
+        displayValue = `Invested: ${invested.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+        tooltip = `Total Invested = Qty (${qty}) * Avg (${avg.toLocaleString('en-IN')})`;
+        foundData = true;
+    } else if (qtyCellOrd && priceCellOrd) {
+        // Orders Page: Show Locked Margin (Qty * Price, /5 for MIS)
+        const qtyText = qtyCellOrd.textContent.split('/')[1] || qtyCellOrd.textContent.split('/')[0];
+        const qty = parseFloat(qtyText.replace(/,/g, '')) || 0;
+        const price = parseFloat(priceCellOrd.textContent.replace(/,/g, '')) || 0;
 
-            displayValue = `Invested: ${invested.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-            tooltip = `Total Invested = Qty (${qty}) * Avg (${avg.toLocaleString('en-IN')})`;
-            foundData = true; // No green/red class for pure invested value
+        const productCell = row.querySelector('td[data-label="Product"]');
+        const isMIS = productCell && productCell.textContent.toLowerCase().includes('mis');
+        const marginMultiplier = isMIS ? 0.2 : 1.0;
+        const margin = qty * price * marginMultiplier;
+
+        displayValue = `Margin: ${margin.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+        tooltip = `Locked Margin = Qty (${qty}) * Price (${price.toLocaleString('en-IN')}) ${isMIS ? '/ 5 (MIS)' : '(CNC)'}`;
+        foundData = true;
+
+        // Add % Diff next to LTP if available
+        if (ltpCellOrd) {
+            const ltp = parseFloat(ltpCellOrd.textContent.replace(/,/g, '')) || 0;
+            if (ltp > 0 && price > 0) {
+                const diffPct = ((ltp - price) / price) * 100;
+                let diffSpan = ltpCellOrd.querySelector('.kite-ltp-diff');
+                if (!diffSpan) {
+                    diffSpan = document.createElement('span');
+                    ltpCellOrd.appendChild(diffSpan);
+                }
+                const isPos = diffPct >= 0;
+                diffSpan.className = `kite-ltp-diff ${isPos ? 'text-green' : 'text-red'}`;
+                diffSpan.textContent = `${isPos ? '+' : ''}${diffPct.toFixed(2)}%`;
+            }
         }
     }
 
@@ -179,6 +213,49 @@ function updateRowInfo(row) {
         infoBadge.textContent = displayValue;
         infoBadge.className = badgeClass;
         infoBadge.title = tooltip;
+    }
+}
+
+/**
+ * Calculates total margin for open orders and updates the header.
+ */
+function updateOrdersTotalMargin() {
+    const isOrdersPage = window.location.pathname.includes('/orders');
+    if (!isOrdersPage) return;
+
+    // Use specific section selector to only get Open Orders
+    const openOrdersTable = document.querySelector('.orders table');
+    if (!openOrdersTable) return;
+
+    const rows = openOrdersTable.querySelectorAll('tbody tr');
+    let totalMargin = 0;
+
+    rows.forEach(row => {
+        const qtyCell = row.querySelector('td[data-label="Qty"]');
+        const priceCell = row.querySelector('td[data-label="Price"]');
+        const productCell = row.querySelector('td[data-label="Product"]');
+
+        if (qtyCell && priceCell) {
+            const qtyText = qtyCell.textContent.split('/')[1] || qtyCell.textContent.split('/')[0];
+            const qty = parseFloat(qtyText.replace(/,/g, '')) || 0;
+            const price = parseFloat(priceCell.textContent.replace(/,/g, '')) || 0;
+
+            const isMIS = productCell && productCell.textContent.toLowerCase().includes('mis');
+            const marginMultiplier = isMIS ? 0.2 : 1.0;
+
+            totalMargin += (qty * price * marginMultiplier);
+        }
+    });
+
+    const header = Array.from(document.querySelectorAll('h3.page-title.small')).find(h => h.textContent.includes('Open orders'));
+    if (header) {
+        let summaryBadge = header.querySelector('.kite-total-summary');
+        if (!summaryBadge) {
+            summaryBadge = document.createElement('span');
+            summaryBadge.className = 'kite-total-summary';
+            header.appendChild(summaryBadge);
+        }
+        summaryBadge.textContent = `Total Margin: ${totalMargin.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
     }
 }
 
@@ -215,19 +292,26 @@ function updatePositionsTotalSummary() {
 }
 
 function injectActionButtons() {
-    const rows = document.querySelectorAll('.holdings table tbody tr, .positions table tbody tr, .orderbook table tbody tr');
+    const rows = document.querySelectorAll('.holdings table tbody tr, .positions table tbody tr, .orderbook table tbody tr, .orders table tbody tr');
 
-    // 1. Setup Positions Header Summary (On Load + Hover Refresh)
+    // 1. Setup Header Summaries (On Load + Hover Refresh)
     const isPositionsPage = window.location.pathname.includes('/positions');
-    const header = Array.from(document.querySelectorAll('h3.page-title.small')).find(h => h.textContent.includes('Positions'));
+    const isOrdersPage = window.location.pathname.includes('/orders');
 
-    if (isPositionsPage && header && !header.dataset.listenerAttached) {
-        // Initial delayed calculation to ensure page is "completely loaded"
+    // Position Summary
+    const posHeader = Array.from(document.querySelectorAll('h3.page-title.small')).find(h => h.textContent.includes('Positions'));
+    if (isPositionsPage && posHeader && !posHeader.dataset.listenerAttached) {
         setTimeout(updatePositionsTotalSummary, 1500);
+        posHeader.addEventListener('mouseenter', updatePositionsTotalSummary);
+        posHeader.dataset.listenerAttached = 'true';
+    }
 
-        // Refresh only on hover
-        header.addEventListener('mouseenter', updatePositionsTotalSummary);
-        header.dataset.listenerAttached = 'true';
+    // Order Summary
+    const ordHeader = Array.from(document.querySelectorAll('h3.page-title.small')).find(h => h.textContent.includes('Open orders'));
+    if (isOrdersPage && ordHeader && !ordHeader.dataset.listenerAttached) {
+        setTimeout(updateOrdersTotalMargin, 1500);
+        ordHeader.addEventListener('mouseenter', updateOrdersTotalMargin);
+        ordHeader.dataset.listenerAttached = 'true';
     }
 
     rows.forEach(row => {
@@ -264,6 +348,11 @@ function injectActionButtons() {
 
         // 2. Individual row info: Show on load once
         updateRowInfo(row);
+
+        // 2.5 Extra delay for Orders page (LTP sometimes loads late)
+        if (isOrdersPage) {
+            setTimeout(() => updateRowInfo(row), 1500);
+        }
 
         // 3. Individual row info: Update value on mouseover
         row.addEventListener('mouseenter', () => updateRowInfo(row));

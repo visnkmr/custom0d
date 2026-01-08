@@ -84,3 +84,22 @@
     font-weight: 500;
     vertical-align: middle;
 }
+
+.kite-ltp-diff {
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 4px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    vertical-align: middle;
+}
+
+.kite-ltp-diff.text-green {
+    background: #e8f5e9;
+    color: #4caf50;
+}
+
+.kite-ltp-diff.text-red {
+    background: #ffebee;
+    color: #f44336;
+}
