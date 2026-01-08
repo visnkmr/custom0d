@@ -78,11 +78,13 @@
     font-size: 13px;
     background: #34495e;
     color: white;
-    padding: 3px 8px;
+    padding: 3px 10px;
     border-radius: 4px;
     margin-left: 10px;
     font-weight: 500;
     vertical-align: middle;
+    display: inline-flex;
+    gap: 12px;
 }
 
 .kite-ltp-diff {
@@ -102,4 +104,47 @@
 .kite-ltp-diff.text-red {
     background: #ffebee;
     color: #f44336;
+}
+
+.kite-exclude-btn {
+    background: none;
+    border: none;
+    color: #999;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 5px;
+    margin-right: 8px;
+    border-radius: 3px;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+}
+
+.kite-exclude-btn:hover {
+    color: #f44336;
+    background: #ffebee;
+    border-color: #ffcdd2;
+}
+
+.kite-exclude-btn.excluded {
+    color: #f44336;
+    background: #ffebee;
+    border-color: #ffcdd2;
+}
+
+.kite-excluded-row {
+    opacity: 0.5;
+    background-color: #f9f9f9 !important;
+}
+
+.kite-excluded-row td:not(.instrument) {
+    text-decoration: line-through;
+    text-decoration-color: rgba(244, 67, 54, 0.4);
+}
+
+.kite-excluded-row .kite-action-btns,
+.kite-excluded-row .col-menu {
+    text-decoration: none !important;
 }

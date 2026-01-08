@@ -13,6 +13,20 @@ const ICONS = {
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+const EXCLUDE_STORAGE_KEY = 'kite_excluded_instruments';
+
+function getExcludeList() {
+    try {
+        return JSON.parse(localStorage.getItem(EXCLUDE_STORAGE_KEY)) || [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function setExcludeList(list) {
+    localStorage.setItem(EXCLUDE_STORAGE_KEY, JSON.stringify(list));
+}
+
 /**
  * Executes a Kite action by simulating the exact hover and click sequence.
  */
@@ -217,6 +231,51 @@ function updateRowInfo(row) {
 }
 
 /**
+ * Calculates total invested and current value for holdings and updates the header.
+ */
+function updateHoldingsTotalSummary() {
+    const isHoldingsPage = window.location.pathname.includes('/holdings');
+    if (!isHoldingsPage) return;
+
+    const rows = document.querySelectorAll('.holdings table tbody tr');
+    let totalInvested = 0;
+    let totalCurrent = 0;
+    const excludeList = getExcludeList();
+
+    rows.forEach(row => {
+        const symbol = (row.querySelector('.tradingsymbol') || row.querySelector('.instrument a span') || row.querySelector('.instrument span'))?.textContent.trim();
+        if (symbol && excludeList.includes(symbol)) {
+            row.classList.add('kite-excluded-row');
+            return;
+        }
+        row.classList.remove('kite-excluded-row');
+
+        const investedCell = row.querySelector('td[data-label="Invested"]');
+        const currentValCell = row.querySelector('td[data-label="Cur. val"]');
+
+        if (investedCell && currentValCell) {
+            totalInvested += parseFloat(investedCell.textContent.replace(/,/g, '')) || 0;
+            totalCurrent += parseFloat(currentValCell.textContent.replace(/,/g, '')) || 0;
+        }
+    });
+
+    const header = Array.from(document.querySelectorAll('h3.page-title.small')).find(h => h.textContent.includes('Holdings'));
+    if (header) {
+        let summaryBadge = header.querySelector('.kite-total-summary');
+        if (!summaryBadge) {
+            summaryBadge = document.createElement('span');
+            summaryBadge.className = 'kite-total-summary';
+            header.appendChild(summaryBadge);
+        }
+
+        summaryBadge.innerHTML = `
+            <span>Inv: ${totalInvested.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+            <span>Cur: ${totalCurrent.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+        `;
+    }
+}
+
+/**
  * Calculates total margin for open orders and updates the header.
  */
 function updateOrdersTotalMargin() {
@@ -295,8 +354,17 @@ function injectActionButtons() {
     const rows = document.querySelectorAll('.holdings table tbody tr, .positions table tbody tr, .orderbook table tbody tr, .orders table tbody tr');
 
     // 1. Setup Header Summaries (On Load + Hover Refresh)
+    const isHoldingsPage = window.location.pathname.includes('/holdings');
     const isPositionsPage = window.location.pathname.includes('/positions');
     const isOrdersPage = window.location.pathname.includes('/orders');
+
+    // Holdings Summary
+    const holdHeader = Array.from(document.querySelectorAll('h3.page-title.small')).find(h => h.textContent.includes('Holdings'));
+    if (isHoldingsPage && holdHeader && !holdHeader.dataset.listenerAttached) {
+        setTimeout(updateHoldingsTotalSummary, 1500);
+        holdHeader.addEventListener('mouseenter', updateHoldingsTotalSummary);
+        holdHeader.dataset.listenerAttached = 'true';
+    }
 
     // Position Summary
     const posHeader = Array.from(document.querySelectorAll('h3.page-title.small')).find(h => h.textContent.includes('Positions'));
@@ -318,8 +386,41 @@ function injectActionButtons() {
         const instrumentCell = row.querySelector('td.instrument');
         if (!instrumentCell) return;
 
+        // Handle exclusion for holdings (checked separately from action buttons)
+        if (isHoldingsPage && !instrumentCell.querySelector('.kite-exclude-btn')) {
+            const excludeList = getExcludeList();
+            const symbol = (row.querySelector('.tradingsymbol') || row.querySelector('.instrument a span') || row.querySelector('.instrument span'))?.textContent.trim();
+            if (symbol) {
+                const isExcluded = excludeList.includes(symbol);
+                if (isExcluded) row.classList.add('kite-excluded-row');
+
+                const excludeBtn = document.createElement('button');
+                excludeBtn.className = `kite-exclude-btn ${isExcluded ? 'excluded' : ''}`;
+                excludeBtn.innerHTML = '&#8854;'; // Minus symbol
+                excludeBtn.title = isExcluded ? 'Include in calculation' : 'Exclude from calculation';
+
+                excludeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const currentList = getExcludeList();
+                    if (currentList.includes(symbol)) {
+                        setExcludeList(currentList.filter(s => s !== symbol));
+                        excludeBtn.classList.remove('excluded');
+                        row.classList.remove('kite-excluded-row');
+                    } else {
+                        setExcludeList([...currentList, symbol]);
+                        excludeBtn.classList.add('excluded');
+                        row.classList.add('kite-excluded-row');
+                    }
+                    updateHoldingsTotalSummary();
+                });
+
+                instrumentCell.prepend(excludeBtn);
+            }
+        }
+
         let container = instrumentCell.querySelector(`.${BTN_CONTAINER_CLASS}`);
-        if (container) return; // Already injected
+        if (container) return; // Action buttons already injected
 
         // Create container and buttons
         container = document.createElement('div');
