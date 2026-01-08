@@ -217,7 +217,10 @@ function injectActionButtons() {
             instrumentCell.appendChild(container);
         }
 
-        // Add listener to calculate ONLY on mouse hover
+        // 1. Calculate and show on load once
+        updateRowInfo(row);
+
+        // 2. Update value only on mouseover
         row.addEventListener('mouseenter', () => updateRowInfo(row));
     });
 }
