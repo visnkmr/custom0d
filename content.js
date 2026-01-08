@@ -27,6 +27,21 @@ function setExcludeList(list) {
     localStorage.setItem(EXCLUDE_STORAGE_KEY, JSON.stringify(list));
 }
 
+const TAG_STORAGE_KEY = 'kite_instrument_tags';
+const AVAILABLE_TAGS = ['NONE', 'MF', 'BOND', 'SGB', 'EQUITY', 'INVIT'];
+
+function getTagMap() {
+    try {
+        return JSON.parse(localStorage.getItem(TAG_STORAGE_KEY)) || {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function setTagMap(map) {
+    localStorage.setItem(TAG_STORAGE_KEY, JSON.stringify(map));
+}
+
 /**
  * Executes a Kite action by simulating the exact hover and click sequence.
  */
@@ -234,32 +249,61 @@ function updateRowInfo(row) {
  * Calculates total invested and current value for holdings and updates the header.
  */
 function updateHoldingsTotalSummary() {
-    const isHoldingsPage = window.location.pathname.includes('/holdings');
+    const isHoldingsPage = window.location.pathname.includes('/holdings') || document.querySelector('.holdings-page');
     if (!isHoldingsPage) return;
 
     const rows = document.querySelectorAll('.holdings table tbody tr');
     let totalInvested = 0;
     let totalCurrent = 0;
+
+    // Tag-wise totals
+    const tagTotals = {};
+    AVAILABLE_TAGS.forEach(tag => {
+        if (tag !== 'NONE') tagTotals[tag] = { inv: 0, cur: 0 };
+    });
+
     const excludeList = getExcludeList();
+    const tagMap = getTagMap();
+
+
+
 
     rows.forEach(row => {
         const symbol = (row.querySelector('.tradingsymbol') || row.querySelector('.instrument a span') || row.querySelector('.instrument span'))?.textContent.trim();
-        if (symbol && excludeList.includes(symbol)) {
+        const isExcluded = symbol && excludeList.includes(symbol);
+        if (isExcluded) {
             row.classList.add('kite-excluded-row');
-            return;
+        } else {
+            row.classList.remove('kite-excluded-row');
         }
-        row.classList.remove('kite-excluded-row');
 
         const investedCell = row.querySelector('td[data-label="Invested"]');
         const currentValCell = row.querySelector('td[data-label="Cur. val"]');
 
         if (investedCell && currentValCell) {
-            totalInvested += parseFloat(investedCell.textContent.replace(/,/g, '')) || 0;
-            totalCurrent += parseFloat(currentValCell.textContent.replace(/,/g, '')) || 0;
+            const inv = parseFloat(investedCell.textContent.replace(/,/g, '')) || 0;
+            const cur = parseFloat(currentValCell.textContent.replace(/,/g, '')) || 0;
+
+            if (!isExcluded) {
+                totalInvested += inv;
+                totalCurrent += cur;
+            }
+
+            // Add to tag total if a tag is set
+            const tag = tagMap[symbol];
+            if (tag && tag !== 'NONE' && tagTotals[tag]) {
+                tagTotals[tag].inv += inv;
+                tagTotals[tag].cur += cur;
+            }
         }
     });
 
-    const header = Array.from(document.querySelectorAll('h3.page-title.small')).find(h => h.textContent.includes('Holdings'));
+    const headerSelectors = ['h3.page-title', '.page-header h3', 'h3'];
+    const header = Array.from(document.querySelectorAll(headerSelectors.join(',')))
+        .find(h => h.textContent.toUpperCase().includes('HOLDINGS'));
+
+
+
     if (header) {
         let summaryBadge = header.querySelector('.kite-total-summary');
         if (!summaryBadge) {
@@ -268,10 +312,28 @@ function updateHoldingsTotalSummary() {
             header.appendChild(summaryBadge);
         }
 
-        summaryBadge.innerHTML = `
-            <span>Inv: ${totalInvested.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
-            <span>Cur: ${totalCurrent.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+        let html = `
+            <div class="kite-summary-cat">
+                <span class="kite-summary-label">TOTAL:</span>
+                <span class="kite-summary-val">${totalInvested.toLocaleString('en-IN', { maximumFractionDigits: 0 })} | ${totalCurrent.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+            </div>
         `;
+
+        // Add cats that have values
+        Object.entries(tagTotals).forEach(([tag, vals]) => {
+            if (vals.inv > 0) {
+                html += `
+                    <div class="kite-summary-cat">
+                        <span class="kite-summary-label">${tag}:</span>
+                        <span class="kite-summary-val">${vals.inv.toLocaleString('en-IN', { maximumFractionDigits: 0 })} | ${vals.cur.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                    </div>
+                `;
+            }
+        });
+
+        if (summaryBadge.innerHTML !== html) {
+            summaryBadge.innerHTML = html;
+        }
     }
 }
 
@@ -354,30 +416,43 @@ function injectActionButtons() {
     const rows = document.querySelectorAll('.holdings table tbody tr, .positions table tbody tr, .orderbook table tbody tr, .orders table tbody tr');
 
     // 1. Setup Header Summaries (On Load + Hover Refresh)
-    const isHoldingsPage = window.location.pathname.includes('/holdings');
-    const isPositionsPage = window.location.pathname.includes('/positions');
-    const isOrdersPage = window.location.pathname.includes('/orders');
+    const isHoldingsPage = window.location.pathname.includes('/holdings') || document.querySelector('.holdings-page');
+    const isPositionsPage = window.location.pathname.includes('/positions') || document.querySelector('.positions-page');
+    const isOrdersPage = window.location.pathname.includes('/orders') || document.querySelector('.orders-page');
 
-    // Holdings Summary
-    const holdHeader = Array.from(document.querySelectorAll('h3.page-title.small')).find(h => h.textContent.includes('Holdings'));
-    if (isHoldingsPage && holdHeader && !holdHeader.dataset.listenerAttached) {
-        setTimeout(updateHoldingsTotalSummary, 1500);
+
+
+
+    const findHeader = (text, selectors) => {
+        for (const sel of selectors) {
+            const h = Array.from(document.querySelectorAll(sel)).find(el => el.textContent.toUpperCase().includes(text.toUpperCase()));
+            if (h) return h;
+        }
+        return null;
+    };
+
+    const headerSelectors = ['h3.page-title', '.page-header h3', 'h3'];
+
+    // Ensure summaries are updated if page is ready
+    if (isHoldingsPage) updateHoldingsTotalSummary();
+    if (isPositionsPage) updatePositionsTotalSummary();
+    if (isOrdersPage) updateOrdersTotalMargin();
+
+    // Attach hover listeners (only once)
+    const holdHeader = findHeader('Holdings', headerSelectors);
+    if (holdHeader && !holdHeader.dataset.listenerAttached) {
         holdHeader.addEventListener('mouseenter', updateHoldingsTotalSummary);
         holdHeader.dataset.listenerAttached = 'true';
     }
 
-    // Position Summary
-    const posHeader = Array.from(document.querySelectorAll('h3.page-title.small')).find(h => h.textContent.includes('Positions'));
-    if (isPositionsPage && posHeader && !posHeader.dataset.listenerAttached) {
-        setTimeout(updatePositionsTotalSummary, 1500);
+    const posHeader = findHeader('Positions', headerSelectors);
+    if (posHeader && !posHeader.dataset.listenerAttached) {
         posHeader.addEventListener('mouseenter', updatePositionsTotalSummary);
         posHeader.dataset.listenerAttached = 'true';
     }
 
-    // Order Summary
-    const ordHeader = Array.from(document.querySelectorAll('h3.page-title.small')).find(h => h.textContent.includes('Open orders'));
-    if (isOrdersPage && ordHeader && !ordHeader.dataset.listenerAttached) {
-        setTimeout(updateOrdersTotalMargin, 1500);
+    const ordHeader = findHeader('Open orders', headerSelectors);
+    if (ordHeader && !ordHeader.dataset.listenerAttached) {
         ordHeader.addEventListener('mouseenter', updateOrdersTotalMargin);
         ordHeader.dataset.listenerAttached = 'true';
     }
@@ -416,6 +491,35 @@ function injectActionButtons() {
                 });
 
                 instrumentCell.prepend(excludeBtn);
+            }
+        }
+
+        // Handle tagging for holdings
+        if (isHoldingsPage && !instrumentCell.querySelector('.kite-tag-select')) {
+            const tagMap = getTagMap();
+            const symbol = (row.querySelector('.tradingsymbol') || row.querySelector('.instrument a span') || row.querySelector('.instrument span'))?.textContent.trim();
+            if (symbol) {
+                const currentTag = tagMap[symbol] || 'NONE';
+                const select = document.createElement('select');
+                select.className = 'kite-tag-select';
+
+                AVAILABLE_TAGS.forEach(tag => {
+                    const opt = document.createElement('option');
+                    opt.value = tag;
+                    opt.textContent = tag;
+                    if (tag === currentTag) opt.selected = true;
+                    select.appendChild(opt);
+                });
+
+                select.addEventListener('change', (e) => {
+                    const newTag = e.target.value;
+                    const currentMap = getTagMap();
+                    currentMap[symbol] = newTag;
+                    setTagMap(currentMap);
+                    updateHoldingsTotalSummary();
+                });
+
+                instrumentCell.prepend(select);
             }
         }
 
