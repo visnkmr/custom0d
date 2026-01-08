@@ -121,7 +121,7 @@ function createActionButton(type, title, actionType, row) {
 }
 
 function injectActionButtons() {
-    const rows = document.querySelectorAll('.holdings table tbody tr, .positions table tbody tr');
+    const rows = document.querySelectorAll('.holdings table tbody tr, .positions table tbody tr, .orderbook table tbody tr');
 
     rows.forEach(row => {
         const instrumentCell = row.querySelector('td.instrument');
