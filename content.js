@@ -166,22 +166,35 @@ function getHeaderMap(table) {
 
 function findHeader(possibleTexts) {
     const textArray = Array.isArray(possibleTexts) ? possibleTexts : [possibleTexts];
-    const selectors = ['h3.page-title', '.page-header h3', 'h3', '.title', '.page-title'];
+    // Expanded selectors for Kite UI variations
+    const selectors = ['h3', '.title', '.page-title', '.header-left span', 'span.title', 'a.title', 'h2'];
     
     for (const selector of selectors) {
         const elements = document.querySelectorAll(selector);
         for (const el of elements) {
-            const content = (el.textContent || el.innerText).trim().toLowerCase();
+            const content = (el.innerText || el.textContent || '').trim().toLowerCase();
+            if (!content) continue;
+            
             for (const target of textArray) {
-                if (content.includes(target.toLowerCase())) return el;
+                const search = target.toLowerCase();
+                // Match if content is exact target or starts with target (like "Open (19)")
+                if (content === search || content.startsWith(search) || (content.includes(search) && content.length < 30)) {
+                    // Exclude navigation/top bar items
+                    if (el.closest('.header-right') || el.closest('.watchlist-container') || el.closest('.main-nav')) continue;
+                    return el;
+                }
             }
         }
     }
     
-    // Fallback: search for any div or span that looks like a title if headers fail
-    const allDivs = document.querySelectorAll('.header-left, .page-header');
-    for (const div of allDivs) {
-        if (div.textContent.trim()) return div;
+    // Secondary fallback: Look for specific page container headers
+    const containers = ['.header-left', '.page-header', '.row.header'];
+    for (const cont of containers) {
+        const parent = document.querySelector(cont);
+        if (parent) {
+            const heading = parent.querySelector('h1, h2, h3, span, div');
+            if (heading && textArray.some(t => heading.textContent.toLowerCase().includes(t.toLowerCase()))) return heading;
+        }
     }
 
     return null;
@@ -378,8 +391,9 @@ const updateOrdersTotalMargin = debounce(() => {
 
     if (!settings.showSummaryPanel) return;
 
-    const table = document.querySelector('.orders table');
-    if (!table) return;
+    // Kite might use .orders, .orderbook, or just find any table if specific ones fail
+    const table = document.querySelector('.orders table, .orderbook table, .orders-page table, table');
+    if (!table || !window.location.pathname.includes('/orders')) return;
 
     let totalMargin = 0;
     table.querySelectorAll('tbody tr').forEach(row => {
@@ -419,7 +433,10 @@ const updatePositionsTotalSummary = debounce(() => {
     if (!settings.showSummaryPanel) return;
 
     let totalInvested = 0;
-    document.querySelectorAll('.positions table tbody tr').forEach(row => {
+    const table = document.querySelector('.positions table, .positions-page table, table');
+    if (!table || !window.location.pathname.includes('/positions')) return;
+    
+    table.querySelectorAll('tbody tr').forEach(row => {
         const qtyCell = findCell(row, ["Qty.", "Qty", "Quantity"]);
         const avgCell = findCell(row, ["Avg. cost", "Avg.", "Average price"]);
         const qty = parseFloat((qtyCell?.textContent || '0').replace(/,/g, '')) || 0;
