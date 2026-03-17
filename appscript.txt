@@ -1,0 +1,157 @@
+/**
+ * Gets the note from a specific cell.
+ * @param {number} row The row number.
+ * @param {number} col The column number.
+ * @customfunction
+ */
+function GET_NOTE(row, col) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getActiveSheet();
+  var note = sheet.getRange(row, col).getNote();
+  return note;
+}
+function monitorStocksAndHistory() {
+  const SHEET_NAME = "equity"; 
+  const EMAIL = "visnkmr@gmail.com"; 
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  if (!sheet) { 
+    console.log("❌ ERROR: Sheet '" + SHEET_NAME + "' not found."); 
+    return; 
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return; 
+
+  // --- DATA SETUP ---
+  const rangeData = sheet.getRange(2, 1, lastRow - 1, 11); 
+  const values = rangeData.getValues();
+  
+  // 1. Price History Notes (Column B / Index 2)
+  const rangePriceNotes = sheet.getRange(2, 2, lastRow - 1, 1);
+  const priceNotes = rangePriceNotes.getNotes();
+
+  // 2. Band Position Notes (Column K / Index 11)
+  const rangeBandNotes = sheet.getRange(2, 11, lastRow - 1, 1);
+  const bandNotes = rangeBandNotes.getNotes();
+
+  let alerts = [];
+
+  // --- START LOOP ---
+  values.forEach((row, i) => {
+    // ADJUST INDICES BASED ON YOUR EXISTING LOGIC
+    const symbol = row[0];        // Col A
+    const currentPrice = row[2];  // Col C (Assuming Price is here based on your previous code)
+    const bandPos = row[9];       // Col J (Band Position)
+    const changePct = row[10];    // Col K (Change %)
+
+    if (!symbol) return; 
+
+    let reasons = [];
+
+    // --- RULE 1: CRASH / SURGE ---
+    if (changePct < -5) {
+      reasons.push(`📉 Crash: ${Number(changePct).toFixed(2)}%`);
+    }
+    if (changePct > 5) {
+      reasons.push(`🚀 Surge: ${Number(changePct).toFixed(2)}%`);
+    }
+
+    // --- RULE 2: LOW BAND VALUE ---
+    if (typeof bandPos === 'number' && bandPos < 0.4) {
+      reasons.push(`⚠️ Low Band: ${Number(bandPos).toFixed(2)}`);
+    }
+
+    // --- RULE 3: SIGNIFICANT BAND MOVEMENT ---
+    let lastSavedBand = parseFloat(bandNotes[i][0]);
+    if (!isNaN(lastSavedBand) && typeof bandPos === 'number') {
+      let diff = Math.abs(bandPos - lastSavedBand);
+      if (diff > 0.02) {
+        reasons.push(`📊 Band Move: ${lastSavedBand.toFixed(2)} → ${bandPos.toFixed(2)}`);
+        bandNotes[i][0] = bandPos; // Update Note
+      }
+    } else {
+      if (typeof bandPos === 'number') bandNotes[i][0] = bandPos;
+    }
+
+    // --- RULE 4: 20-DAY LOW ---
+    let historyNote = priceNotes[i][0];
+    let priceHistory = [];
+
+    if (historyNote && historyNote.length > 0) {
+      priceHistory = historyNote.split(",").map(Number);
+    }
+
+    if (priceHistory.length > 0) {
+      const lowestInHistory = Math.min(...priceHistory);
+      if (Number(currentPrice) < lowestInHistory) {
+        reasons.push(`❄️ New 20-Day Low (Prev: ${lowestInHistory})`);
+      }
+    }
+
+    // Update Price History
+    priceHistory.push(Number(currentPrice));
+    if (priceHistory.length > 340) priceHistory.shift(); 
+    priceNotes[i][0] = priceHistory.join(",");
+
+    // --- COMPILE ALERTS ---
+    if (reasons.length > 0) {
+      alerts.push({
+        symbol: symbol,
+        price: Number(currentPrice).toFixed(2),
+        reasons: reasons.join("<br>") // Use <br> for line breaks inside the table cell
+      });
+    }
+  });
+
+  // --- SAVE UPDATES ---
+  rangePriceNotes.setNotes(priceNotes);
+  rangeBandNotes.setNotes(bandNotes);
+
+  // --- SEND EMAIL (HTML TABLE VERSION) ---
+  if (alerts.length > 0) {
+    let subject = `Stock Alert: ${alerts.length} Updates`;
+    
+    // 1. Define Table Styles (CSS)
+    const tableStyle = 'border-collapse: collapse; width: 100%; border: 1px solid #ddd; font-family: Arial, sans-serif;';
+    const thStyle = 'background-color: #f2f2f2; border: 1px solid #ddd; padding: 10px; text-align: left;';
+    const tdStyle = 'border: 1px solid #ddd; padding: 10px; vertical-align: top;';
+    
+    // 2. Build HTML Header
+    let htmlBody = `
+      <h3 style="font-family: Arial, sans-serif;">The following stocks require attention:</h3>
+      <table style="${tableStyle}">
+        <tr>
+          <th style="${thStyle}">Symbol</th>
+          <th style="${thStyle}">Price (₹)</th>
+          <th style="${thStyle}">Reasons</th>
+        </tr>
+    `;
+
+    // 3. Loop through alerts to create Rows
+    alerts.forEach(a => {
+      htmlBody += `
+        <tr>
+          <td style="${tdStyle}"><b>${a.symbol}</b></td>
+          <td style="${tdStyle}">${a.price}</td>
+          <td style="${tdStyle}">${a.reasons}</td>
+        </tr>
+      `;
+    });
+
+    // 4. Close Table and Add Link
+    htmlBody += `</table><br><br>`;
+    htmlBody += `<a href="${SpreadsheetApp.getActiveSpreadsheet().getUrl()}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Open Google Sheet</a>`;
+
+    // 5. Send Email using htmlBody
+    MailApp.sendEmail({
+      to: EMAIL,
+      subject: subject,
+      htmlBody: htmlBody
+    });
+
+    console.log("📧 HTML Email sent.");
+  } else {
+    console.log("🚫 No significant changes.");
+  }
+}
