@@ -1,8 +1,5 @@
 /**
  * Gets the note from a specific cell.
- * @param {number} row The row number.
- * @param {number} col The column number.
- * @customfunction
  */
 function GET_NOTE(row, col) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -10,9 +7,20 @@ function GET_NOTE(row, col) {
   var note = sheet.getRange(row, col).getNote();
   return note;
 }
+
 function monitorStocksAndHistory() {
   const SHEET_NAME = "equity"; 
   const EMAIL = "visnkmr@gmail.com"; 
+
+  // --- 1. DATE CHECK (Monday-Friday only) ---
+  const today = new Date();
+  const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const isWeekday = (dayOfWeek >= 1 && dayOfWeek <= 5);
+
+  if (!isWeekday) {
+    console.log("Skipping: Today is the weekend.");
+    return; 
+  }
 
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
   if (!sheet) { 
@@ -23,61 +31,58 @@ function monitorStocksAndHistory() {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return; 
 
-  // --- DATA SETUP ---
   const rangeData = sheet.getRange(2, 1, lastRow - 1, 11); 
   const values = rangeData.getValues();
   
-  // 1. Price History Notes (Column B / Index 2)
   const rangePriceNotes = sheet.getRange(2, 2, lastRow - 1, 1);
   const priceNotes = rangePriceNotes.getNotes();
 
-  // 2. Band Position Notes (Column K / Index 11)
   const rangeBandNotes = sheet.getRange(2, 11, lastRow - 1, 1);
   const bandNotes = rangeBandNotes.getNotes();
 
   let alerts = [];
+  let hasPriceMovement = false; // Flag to check if any price changed
 
   // --- START LOOP ---
   values.forEach((row, i) => {
-    // ADJUST INDICES BASED ON YOUR EXISTING LOGIC
-    const symbol = row[0];        // Col A
-    const currentPrice = row[2];  // Col C (Assuming Price is here based on your previous code)
-    const bandPos = row[9];       // Col J (Band Position)
-    const changePct = row[10];    // Col K (Change %)
+    const symbol = row[0];        
+    const currentPrice = row[2];  
+    const bandPos = row[9];       
+    const changePct = row[10];    
 
     if (!symbol) return; 
 
+    // Check if at least one price has moved from 0%
+    if (changePct !== 0 && changePct !== "") {
+      hasPriceMovement = true;
+    }
+
     let reasons = [];
 
-    // --- RULE 1: CRASH / SURGE ---
-    if (changePct < -5) {
-      reasons.push(`📉 Crash: ${Number(changePct).toFixed(2)}%`);
-    }
-    if (changePct > 5) {
-      reasons.push(`🚀 Surge: ${Number(changePct).toFixed(2)}%`);
-    }
+    // RULE 1: CRASH / SURGE
+    if (changePct < -5) reasons.push(`📉 Crash: ${Number(changePct).toFixed(2)}%`);
+    if (changePct > 5) reasons.push(`🚀 Surge: ${Number(changePct).toFixed(2)}%`);
 
-    // --- RULE 2: LOW BAND VALUE ---
+    // RULE 2: LOW BAND
     if (typeof bandPos === 'number' && bandPos < 0.4) {
       reasons.push(`⚠️ Low Band: ${Number(bandPos).toFixed(2)}`);
     }
 
-    // --- RULE 3: SIGNIFICANT BAND MOVEMENT ---
+    // RULE 3: BAND MOVEMENT
     let lastSavedBand = parseFloat(bandNotes[i][0]);
     if (!isNaN(lastSavedBand) && typeof bandPos === 'number') {
       let diff = Math.abs(bandPos - lastSavedBand);
       if (diff > 0.02) {
         reasons.push(`📊 Band Move: ${lastSavedBand.toFixed(2)} → ${bandPos.toFixed(2)}`);
-        bandNotes[i][0] = bandPos; // Update Note
+        bandNotes[i][0] = bandPos;
       }
-    } else {
-      if (typeof bandPos === 'number') bandNotes[i][0] = bandPos;
+    } else if (typeof bandPos === 'number') {
+      bandNotes[i][0] = bandPos;
     }
 
-    // --- RULE 4: 20-DAY LOW ---
+    // RULE 4: 20-DAY LOW
     let historyNote = priceNotes[i][0];
     let priceHistory = [];
-
     if (historyNote && historyNote.length > 0) {
       priceHistory = historyNote.split(",").map(Number);
     }
@@ -89,69 +94,68 @@ function monitorStocksAndHistory() {
       }
     }
 
-    // Update Price History
     priceHistory.push(Number(currentPrice));
     if (priceHistory.length > 340) priceHistory.shift(); 
     priceNotes[i][0] = priceHistory.join(",");
 
-    // --- COMPILE ALERTS ---
     if (reasons.length > 0) {
       alerts.push({
         symbol: symbol,
-        price: Number(currentPrice).toFixed(2),
-        reasons: reasons.join("<br>") // Use <br> for line breaks inside the table cell
+        price: Number(currentPrice),
+        reasons: reasons.join("<br>")
       });
     }
   });
 
-  // --- SAVE UPDATES ---
+  // SAVE UPDATES TO SHEET
   rangePriceNotes.setNotes(priceNotes);
   rangeBandNotes.setNotes(bandNotes);
 
-  // --- SEND EMAIL (HTML TABLE VERSION) ---
-  if (alerts.length > 0) {
+  // --- SORTING ---
+  // 1. New 20-Day Lows first, then Price High to Low
+  alerts.sort((a, b) => {
+    const aIsLow = a.reasons.includes("20-Day Low");
+    const bIsLow = b.reasons.includes("20-Day Low");
+    if (aIsLow && !bIsLow) return -1;
+    if (!aIsLow && bIsLow) return 1;
+    return b.price - a.price;
+  });
+
+  // --- FINAL SEND CONDITION ---
+  // Only send if: It's a weekday AND prices actually moved AND there are alerts
+  if (hasPriceMovement && alerts.length > 0) {
     let subject = `Stock Alert: ${alerts.length} Updates`;
     
-    // 1. Define Table Styles (CSS)
     const tableStyle = 'border-collapse: collapse; width: 100%; border: 1px solid #ddd; font-family: Arial, sans-serif;';
     const thStyle = 'background-color: #f2f2f2; border: 1px solid #ddd; padding: 10px; text-align: left;';
     const tdStyle = 'border: 1px solid #ddd; padding: 10px; vertical-align: top;';
     
-    // 2. Build HTML Header
-    let htmlBody = `
-      <h3 style="font-family: Arial, sans-serif;">The following stocks require attention:</h3>
-      <table style="${tableStyle}">
-        <tr>
-          <th style="${thStyle}">Symbol</th>
-          <th style="${thStyle}">Price (₹)</th>
-          <th style="${thStyle}">Reasons</th>
-        </tr>
-    `;
+    let htmlBody = `<h3 style="font-family: Arial, sans-serif;">Sorted Stock Updates:</h3>
+                    <table style="${tableStyle}">
+                      <tr>
+                        <th style="${thStyle}">Symbol</th>
+                        <th style="${thStyle}">Price (₹)</th>
+                        <th style="${thStyle}">Reasons</th>
+                      </tr>`;
 
-    // 3. Loop through alerts to create Rows
     alerts.forEach(a => {
-      htmlBody += `
-        <tr>
-          <td style="${tdStyle}"><b>${a.symbol}</b></td>
-          <td style="${tdStyle}">${a.price}</td>
-          <td style="${tdStyle}">${a.reasons}</td>
-        </tr>
-      `;
+      htmlBody += `<tr>
+                    <td style="${tdStyle}"><b>${a.symbol}</b></td>
+                    <td style="${tdStyle}">${a.price.toFixed(2)}</td>
+                    <td style="${tdStyle}">${a.reasons}</td>
+                  </tr>`;
     });
 
-    // 4. Close Table and Add Link
-    htmlBody += `</table><br><br>`;
-    htmlBody += `<a href="${SpreadsheetApp.getActiveSpreadsheet().getUrl()}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Open Google Sheet</a>`;
+    htmlBody += `</table><br><br><a href="${SpreadsheetApp.getActiveSpreadsheet().getUrl()}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Open Google Sheet</a>`;
 
-    // 5. Send Email using htmlBody
     MailApp.sendEmail({
       to: EMAIL,
       subject: subject,
       htmlBody: htmlBody
     });
 
-    console.log("📧 HTML Email sent.");
+    console.log("📧 Email sent (Weekday + Movement detected).");
   } else {
-    console.log("🚫 No significant changes.");
+    console.log("🚫 Email skipped: Either no movement, no alerts, or it's the weekend.");
   }
 }
